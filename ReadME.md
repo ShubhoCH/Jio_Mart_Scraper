@@ -7,6 +7,8 @@ Scrap all the categories from the Jio-Mart Website!
 Download the project from github then go to project directory inside the project and type the following command to install all the required dependencies for the project!
 
 ```bash
+npm i
+===== OR =====
 npm i cheerio
 npm i mongoose
 npm i puppeteer
