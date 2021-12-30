@@ -73,7 +73,7 @@ async function checkPrice(page, OBJ) {
         })
     });
     console.log(OBJ.pageNumber + "::::::::::::::::::::");
-    if($('.pages .next').text() === 'NEXT' && OBJ.pageNumber < 2){
+    if($('.pages .next').text() === 'NEXT' && OBJ.pageNumber < 100){
         OBJ.url = $('.next').find("a").attr('href');
         OBJ.pageNumber += 1;
     }
