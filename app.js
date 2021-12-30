@@ -33,26 +33,43 @@ async function addCategories(page) {
 
 // Get all the Items from the current Page:
 async function getItems(link, name){
-    let page = await configureBrowser(link);
-    await checkPrice(page, name);
+    console.log("Here");
+    let obj = {
+        loop: true,
+        url: link,
+        pageNumber: 1,
+        categoryItems: []
+    }
+    while(obj.loop){
+        let page = await configureBrowser(obj.url);
+        obj = await checkPrice(page, obj);
+    }
+    // Add all the Items in the DataBase:
+    db.addToDB(name, obj.categoryItems);
 }
 
 // Collect all the name and price of each product for the current category:
-async function checkPrice(page, name) {
-    const Items = []
+async function checkPrice(page, OBJ) {
+    const Items = [];
     await page.reload();
     let html = await page.evaluate(() => document.body.innerHTML);
     const $ = cheerio.load(html);
     $('.cat-item').each(function() {
         let price = $(this).find('.price-box #final_price').text();
         let name = $(this).find('.clsgetname').text();
-        Items.push({
+        OBJ.categoryItems.push({
             name,
             price
         })
     });
-    // Add all the Items in the DataBase:
-    db.addToDB(name, Items);
+    console.log(OBJ.pageNumber + "::::::::::::::::::::");
+    if($('.pages .next').text() === 'NEXT' && OBJ.pageNumber < 100){
+        OBJ.url = $('.pages .next').find("a").attr('href');
+        OBJ.pageNumber += 1;
+    }
+    else
+        OBJ.loop = false;
+    return OBJ;
 }
 
 async function configureBrowser(URL) {
@@ -68,3 +85,6 @@ schedule.scheduleJob('0 0 10 * * *', getCategories);
 
 //RUN:
 getCategories();
+// getItems('https://www.jiomart.com/c/groceries/fruits-vegetables/219/page/1', 'FruitsVegetables', 1);
+// getItems('https://www.jiomart.com/c/groceries/dairy-bakery/61', 'DairyBakery', 1);
+// getItems('https://www.jiomart.com/c/groceries/premium-fruits/3107', 'PremiumFruits', 1);

@@ -9,6 +9,7 @@ const itemSchema = {
 };
 
 exports.addToDB = async function(name, data){
+    //console.log(data);
     let collectionName = "";
     for(let x of name){
         if(x != " " && x != "&")
@@ -25,12 +26,20 @@ exports.addToDB = async function(name, data){
             //await item.save();
             arr.push(item);
         }
+        //console.log(arr);
         await Item.insertMany(arr);
         console.log("=====Successfully added to Database!=====");
     }catch(err){
         console.log(err);
     }
 }
+// exports.dropCollections = async function(collections){
+//     mongoose.collection("customers").drop(function(err, delOK) {
+//         if (err) throw err;
+//         if (delOK) console.log("Collection deleted");
+//         db.close();
+//     });
+// }
 // exports.test = async function(name, data){
 //     let collectionName = "";
 //     for(let x of name){
