@@ -2,98 +2,139 @@ const cheerio = require('cheerio');
 const puppeteer = require('puppeteer');
 const schedule = require('node-schedule');
 const db = require(__dirname + '/dbManager');
-const urls = require(__dirname + '/urls');
+const cities = require(__dirname + '/cities');
 
 //Increase Event Listner MaxLimit (Just in case needed someday):
 const EventEmitter = require('events');
+const { mainModule } = require('process');
 class MyEmitter extends EventEmitter {}
 const myEmitter = new MyEmitter();
-// increase the limit
-myEmitter.setMaxListeners(15);
+// Increase the limit
+myEmitter.setMaxListeners(100);
 
 const url = 'https://www.jiomart.com';
-const categories = urls.getUrls();
+const cityDetails = cities.getCities();
 
-// Get All Categories from the website:
-async function getCategories(){
+async function startScrapping(){
+    // Loop through each City for extraction:
+    for(const city of cityDetails){
+        console.log("Started with city: "+ city.cityName);
+        await getItems(city);
+        console.log("Done with city: "+ city.cityName);
+    }
+    console.log("Finished!!!!!");
+}
 
-// For URL automation:
-    // let page = await configureBrowser(url);
-    // await addCategories(page);
-    
-    // Loop through each category for extraction:
-    for(let category of categories){
-        getItems(category.categoryLink, category.categoryName);
+// Get all the Items from the current Page:
+async function getItems(city){
+    try {
+        const categories = [];
+        // Make headless: true in production;
+        const browser = await puppeteer.launch({headless: false});
+        const page = await browser.newPage();
+        await page.goto(url);
+        await page.click('.delivery_content');
+        await page.type('#rel_pincode', city.pincode);
+        await page.click('.apply_btn');
+        // Get All Categories from the website for the Current City:
+        await getCategories(page, categories)
+        console.log(categories);
+        for(const category of categories){
+            let obj = {
+                loop: true,
+                url: category.categoryLink,
+                pageNumber: 1,
+                categoryItems: []
+            }
+            while(obj.loop){
+                await page.goto(obj.url);
+                await checkPrice(page, obj);
+            }
+            // Add all the Items in the DataBase:
+            console.log("==========> " + category.categoryL2);
+            if(obj.categoryItems.length > 0)
+                db.addToDB(city.cityName, category.categoryL1, category.categoryL2, obj.categoryItems);
+            else
+                console.log("Not Enough Items to add in Database!");
+        }
+        browser.close();
+    } catch (e) {
+        console.log(e);
     }
 }
 
 // Collect all the Name's of Categories along with their Url's
-async function addCategories(page) {
+async function getCategories(page, categories) {
     await page.reload();
     let html = await page.evaluate(() => document.body.innerHTML);
-    const $ = cheerio.load(html);
+    const $ = await cheerio.load(html);
+    //Get All Category with Sub-Category:
     $('.o-menu').each(function() {
-        let categoryName = $(this).find('a').first().text();
-        let categoryLink = $(this).find('a').first().attr('href');
-        categories.push({
-            categoryName,
-            categoryLink
-        })
+        const categoryL1 = $(this).find('a').first().text().trim();
+        $(this).find('ul').find('a').each(function(){
+            let categoryL2 = $(this).text().trim();
+            let categoryLink = $(this).attr('href');
+            categories.push({
+                categoryL1,
+                categoryL2,
+                categoryLink
+            })
+        });
     });
-}
-
-// Get all the Items from the current Page:
-async function getItems(link, name){
-    let obj = {
-        loop: true,
-        url: link,
-        pageNumber: 1,
-        categoryItems: []
-    }
-    while(obj.loop){
-        let page = await configureBrowser(obj.url);
-        await checkPrice(page, obj);
-    }
-    // Add all the Items in the DataBase:
-    console.log(obj.categoryItems.length);
-    db.addToDB(name, obj.categoryItems);
 }
 
 // Collect all the name and price of each product for the current category:
 async function checkPrice(page, OBJ) {
-    await page.reload();
-    let html = await page.evaluate(() => document.body.innerHTML);
-    const $ = cheerio.load(html);
-    $('.col-md-3').each(function() {
-        let price = $(this).find('.price-box #final_price').text();
-        let name = $(this).find('.clsgetname').text();
-        OBJ.categoryItems.push({
-            name,
-            price
-        })
-    });
-    console.log(OBJ.pageNumber + "::::::::::::::::::::");
-    if($('.pages .next').text() === 'NEXT' && OBJ.pageNumber < 100){
-        OBJ.url = $('.next').find("a").attr('href');
-        OBJ.pageNumber += 1;
+    try {
+        await page.reload();
+        let html = await page.evaluate(() => document.body.innerHTML);
+        const $ = cheerio.load(html);
+        if($('#product_count').attr('value') === '0'){
+            OBJ.loop = false;
+            return;
+        } 
+        $('.col-md-3').each(function() {
+            let MRP = $(this).find('.price-box #price').text();
+            let temp = "";
+            for(let i=0;i<MRP.length;i++)
+                if(i>1)
+                    temp+=MRP[i];
+            MRP=temp;
+            let SP = $(this).find('.price-box #final_price').text();
+            temp = "";
+            for(let i=0;i<SP.length;i++)
+                if(i>1)
+                    temp+=SP[i];
+            SP=temp;
+            let name = $(this).find('.clsgetname').text();
+            let brand = $(this).find(".drug-varients").text();
+            // console.log(brand);
+            let image = $(this).find(".product-image-photo").attr('src');
+            let link = 'https://www.jiomart.com' + $(this).find(".prod-name").attr('href');
+            OBJ.categoryItems.push({
+                name,
+                brand,
+                MRP,
+                SP,
+                image,
+                link
+            })
+        });
+        console.log("Page Number: " + OBJ.pageNumber + "::::::::::::::::::::");
+        if($('.pages .next').text() === 'NEXT' && OBJ.pageNumber < 100){
+            OBJ.url = $('.next').find("a").attr('href');
+            OBJ.pageNumber += 1;
+        }
+        else
+            OBJ.loop = false;
+    } catch (e) {
+        console.log(e);
     }
-    else
-        OBJ.loop = false;
-}
-
-async function configureBrowser(URL) {
-    const browser = await puppeteer.launch();
-    const page = await browser.newPage();
-    await page.goto(URL);
-    return page;
 }
 
 // Re-extract Data after every Day at 10 o'clock: 
 //(for testing use:   */30 * * * * * {every 30 sec})
-schedule.scheduleJob('0 0 10 * * *', getCategories);
+schedule.scheduleJob('0 0 10 * * *', startScrapping);
 
-//RUN:
-getCategories();
-//getItems('https://www.jiomart.com/c/groceries/fruits-vegetables/219/page/1', 'FruitsVegetables', 1);
-// getItems('https://www.jiomart.com/c/groceries/dairy-bakery/61', 'DairyBakery', 1);
-// getItems('https://www.jiomart.com/c/groceries/premium-fruits/3107', 'PremiumFruits', 1);
+//STARTS_HERE:
+startScrapping();
