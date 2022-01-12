@@ -37,4 +37,9 @@ use JioMart_Data
 show collections
 db.<collection_name_found_from_above_command>.find().pretty()
 ```
+OR
+You can use MongoDBCompass:
+```bash
+https://www.mongodb.com/try/download/compass
+```
 This will show all the retrived data for that perticular collection!
